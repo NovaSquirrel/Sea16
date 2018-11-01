@@ -403,10 +403,12 @@ void do_instruction(struct cpu *s) {
 				s->pc = temp;
 			break;
 		case 0xd4: // jumpf +xx
+			temp = instruction_byte(s);
 			if(!s->a)
 				s->pc += temp + 1;
 			break;
 		case 0xd5: // jumpf -xx
+			temp = instruction_byte(s);
 			if(!s->a)
 				s->pc -= temp - 1;
 			break;
