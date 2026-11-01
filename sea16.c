@@ -202,10 +202,10 @@ void do_instruction(struct cpu *s) {
 			break;
 
 		case 0x98: // blda far
-			s->a = read_word(s, far(s));
+			s->a = read_byte(s, far(s));
 			break;
 		case 0x99: // bldb far
-			s->b = read_word(s, far(s));
+			s->b = read_byte(s, far(s));
 			break;
 		case 0x9a: // bpush far
 			push_word(s, read_byte(s, far(s)));
@@ -275,7 +275,7 @@ void do_instruction(struct cpu *s) {
 		case 0xaf: // swap
 			temp = s->a;
 			s->a = s->b;
-			s->a = temp;
+			s->b = temp;
 			break;
 
 		case 0xb0: // ucmplt
@@ -340,28 +340,31 @@ void do_instruction(struct cpu *s) {
 			s->a -= s->b;
 			break;
 		case 0xc4: // lshift
-			s->a <<= s->b;
+			s->a = s->b < 16 ? s->a << s->b : 0;
 			break;
 		case 0xc5: // double
 			s->a <<= 1;
 			break;
 		case 0xc6: // rshift
-			s->a >>= s->b;
+			s->a = s->b < 16 ? s->a >> s->b : 0;
 			break;
 		case 0xc7: // arshift
-			s->a = ((int16_t)s->a) >> s->b;
+			s->a = s->b < 16 ? ((int16_t)s->a) >> s->b : 0;
 			break;
+		// A zero divisor leaves 0xffff as the quotient and the dividend as the remainder.
 		case 0xc8: // divu
-			s->a /= s->b;
+			s->a = s->b ? s->a / s->b : 0xffff;
 			break;
 		case 0xc9: // divs
-			s->a = (int16_t)s->a / (int16_t)s->b;
+			s->a = s->b ? (int16_t)s->a / (int16_t)s->b : 0xffff;
 			break;
 		case 0xca: // modu
-			s->a %= s->b;
+			if(s->b)
+				s->a %= s->b;
 			break;
 		case 0xcb: // mods
-			s->a = (int16_t)s->a % (int16_t)s->b;
+			if(s->b)
+				s->a = (int16_t)s->a % (int16_t)s->b;
 			break;
 		case 0xcc: // mult
 			s->a *= s->b;
@@ -395,7 +398,7 @@ void do_instruction(struct cpu *s) {
 		case 0xd1: // jumpt -xx
 			temp = instruction_byte(s);
 			if(s->a)
-				s->pc -= temp - 1;
+				s->pc -= temp + 1;
 			break;
 		case 0xd2: // jumpt xxxx
 			temp = instruction_word(s);
@@ -410,7 +413,7 @@ void do_instruction(struct cpu *s) {
 		case 0xd5: // jumpf -xx
 			temp = instruction_byte(s);
 			if(!s->a)
-				s->pc -= temp - 1;
+				s->pc -= temp + 1;
 			break;
 		case 0xd6: // jumpf xxxx
 			temp = instruction_word(s);
@@ -432,7 +435,8 @@ void do_instruction(struct cpu *s) {
 			temp3 = instruction_word(s); // default case
 			if(s->a < temp || s->a > temp2)
 				s->pc = temp3; // go to default
-			s->pc = read_word(s, s->pc+(s->a-temp)*2); // jump table
+			else
+				s->pc = read_word(s, s->pc+(s->a-temp)*2); // jump table
 			break;
 		case 0xdd: // switchlist
 			temp = instruction_word(s); // number of cases
@@ -443,9 +447,10 @@ void do_instruction(struct cpu *s) {
 					s->pc = temp3;
 					break;
 				}
+				temp--;
 			}
-			// default case
-			s->pc = instruction_word(s);
+			if(temp == 0) // default case
+				s->pc = instruction_word(s);
 			break;
 		case 0xde: // in xx
 			temp = instruction_byte(s);			
@@ -514,10 +519,10 @@ void do_instruction(struct cpu *s) {
 				static const int direct_count_offsets[] = {1, 2, -1, -2};
 
 				temp = instruction_byte(s);
-				uint16_t address = fast(s, temp);
-				uint16_t value = read_word(s, temp2);
-				int mode = temp >>= 6; // get just the mode
+				int mode = temp >> 6; // get just the mode
 				int amount = (temp>>4)&3;
+				uint16_t address = fast(s, temp);
+				uint16_t value = read_word(s, address);
 
 				if(mode == 2) { // lda incrementing
 					if(amount & 1) {
